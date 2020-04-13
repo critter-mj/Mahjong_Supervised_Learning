@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch.utils.data import Dataset, DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 import argparse
@@ -17,7 +18,6 @@ IN_CHANNELS = 240
 MID_CHANNELS = 32
 BLOCKS_NUM = 10
 BATCH_SIZE = 32
-#BATCH_SIZE = 2
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class Trainer:
@@ -67,17 +67,21 @@ class Trainer:
         return epoch_loss, acc
 
     def run_train(self, epoch_begin, epoch_end, test_interval, save_interval):
+        writer = SummaryWriter(log_dir="./logs")
         for i in tqdm(range(epoch_begin, 1 + epoch_end)):
             train_loss, train_acc = self.epoch(True)
             print("train_loss:", train_loss, "train_acc:", train_acc)
+            writer.add_scalar("train_acc", train_acc, i)
 
             if i % test_interval == 0 and 0 < len(self.test_file_list):
                 test_loss, test_acc = self.epoch(False)
                 print("test_loss:", test_loss, "test_acc:", test_acc)
+                writer.add_scalar("test_acc", test_acc, i)
 
             if i % save_interval == 0:
                 state = {'epoch': i, 'model': self.model.state_dict(), 'optimizer': self.optimizer.state_dict()}
                 torch.save(state, "train_tmp.pth")
+        writer.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -106,9 +110,9 @@ if __name__ == '__main__':
 
     trainer = Trainer(model, optimizer, criterion)
 
-    train_prefix = "../akochan_ui/tenhou_npz/discard/2018/20180101/discard_*.npz"
+    train_prefix = "../akochan_ui/tenhou_npz/discard/2018/20180101/discard_2018010100*.npz"
     #train_prefix = "tenhou_npz/discard/2018/20180101/discard_*.npz"
-    test_prefix = "../akochan_ui/tenhou_npz/discard/2018/20180110/discard_*.npz"
+    test_prefix = "../akochan_ui/tenhou_npz/discard/2018/20180102/discard_2018010200*.npz"
     #test_prefix = "tenhou_npz/discard/2018/20180102/discard_*.npz"
     trainer.set_file_list(train_prefix, test_prefix)
 

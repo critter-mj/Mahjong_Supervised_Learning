@@ -13,11 +13,12 @@ import argparse
 
 from util import *
 
-IN_CHANNELS = 240
-#MID_CHANNELS = 256
-MID_CHANNELS = 32
-BLOCKS_NUM = 10
+IN_CHANNELS = 164
+MID_CHANNELS = 256
+#MID_CHANNELS = 128
+BLOCKS_NUM = 40
 BATCH_SIZE = 32
+LEARNING_RATE = 0.000005
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class Trainer:
@@ -42,7 +43,7 @@ class Trainer:
         total = 0
 
         for file_path in tqdm(file_list):
-            file_data = FileDatasetsAug(file_path)
+            file_data = FileDatasets(file_path)
             data_loader = DataLoader(file_data, batch_size=BATCH_SIZE, shuffle=is_train, drop_last=is_train)
 
             for inputs, targets in data_loader:
@@ -96,7 +97,7 @@ if __name__ == '__main__':
     if args.load:
         tmp = torch.load("train_tmp.pth")
         model.load_state_dict(tmp['model'])
-        optimizer = torch.optim.Adam(model.parameters())
+        optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
         optimizer.load_state_dict(tmp['optimizer'])
         if DEVICE == 'cuda':
             for state in optimizer.state.values():
@@ -105,18 +106,19 @@ if __name__ == '__main__':
                         state[k] = v.cuda()
         epoch_begin = tmp['epoch'] + 1
     else:
-        optimizer = torch.optim.Adam(model.parameters())
+        optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
         epoch_begin = 0
 
     trainer = Trainer(model, optimizer, criterion)
 
-    train_prefix = "../akochan_ui/tenhou_npz/discard/2018/20180101/discard_2018010100*.npz"
-    #train_prefix = "tenhou_npz/discard/2018/20180101/discard_*.npz"
-    test_prefix = "../akochan_ui/tenhou_npz/discard/2018/20180102/discard_2018010200*.npz"
-    #test_prefix = "tenhou_npz/discard/2018/20180102/discard_*.npz"
+    #train_prefix = "../akochan_ui/tenhou_npz/discard/2018/20180101/discard_2018010100*.npz"
+    train_prefix = "tenhou_npz/discard/2017/20170*/discard_20170*.npz"
+    #test_prefix = "../akochan_ui/tenhou_npz/discard/2018/20180102/discard_2018010200*.npz"
+    test_prefix = "tenhou_npz/discard/2017/201710*/discard_201710*.npz"
     trainer.set_file_list(train_prefix, test_prefix)
 
-    print(trainer.test_file_list)
+    print("train_files_num:", len(trainer.train_file_list))
+    print("test_files_num:", len(trainer.test_file_list))
 
     trainer.run_train(epoch_begin, 200, 1, 10)
 

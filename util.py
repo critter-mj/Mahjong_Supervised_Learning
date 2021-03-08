@@ -11,10 +11,9 @@ from tqdm import tqdm
 
 """
 def get_tmp_size(models, input_size):
-    tmp = (BATCH_SIZE, input_size[0], input_size[1], input_size[2])
+    tmp = (32, input_size[0], input_size[1], input_size[2])
     x = torch.zeros(tmp)
-    for model in models:
-        x = model(x)
+    x = models.forward(x)
     return tuple([x.size()[i] for i in range(1, x.dim())])
 """
 
@@ -48,7 +47,7 @@ class DiscardNet(nn.Module):
         self.res_blocks = nn.Sequential(*blocks)
 
         self.postproc = nn.Sequential(
-            nn.Conv2d(in_channels=channels_num, out_channels=1, kernel_size=(3,1), padding=(1,0), bias=False),
+            nn.Conv2d(in_channels=channels_num, out_channels=1, kernel_size=(1,1), padding=(1,0), bias=False),
             #nn.ReLU()
         )
 
@@ -57,7 +56,43 @@ class DiscardNet(nn.Module):
         x = self.res_blocks(x)
         x = self.postproc(x)
         x = x.view(x.size(0), -1)  # [B, C, H, W] -> [B, C*H*W]
+        #print(x)
         return x
+        #return F.log_softmax(x)
+
+class PonNet(nn.Module):
+    def __init__(self, in_channels, channels_num, blocks_num):
+        super(PonNet, self).__init__()
+        self.preproc = nn.Sequential(
+            nn.Conv2d(in_channels=in_channels, out_channels=channels_num, kernel_size=(3,1), padding=(1,0), bias=False),
+            #nn.BatchNorm2d(self.channels[0]),
+            nn.ReLU()
+        )
+
+        blocks = []
+        for _i in range(blocks_num):
+            blocks.append(ResBlock(channels_num))
+        self.res_blocks = nn.Sequential(*blocks)
+
+        self.postproc = nn.Sequential(
+            nn.Conv2d(in_channels=channels_num, out_channels=32, kernel_size=(3,1), padding=(1,0), bias=False),
+            #nn.ReLU()
+        )
+
+        self.dence = nn.Sequential(
+            #nn.Linear(1024,256),
+            nn.Linear(1088,256),
+            nn.Linear(256,2)
+        )
+
+    def forward(self, x):
+        x = self.preproc(x)
+        x = self.res_blocks(x)
+        x = self.postproc(x)
+        x = x.view(x.size(0), -1)
+        x = self.dence(x)
+        return x
+        #return F.log_softmax(x)
 
 """ dataset """
 
@@ -66,6 +101,21 @@ class FileDatasets(Dataset):
         npz = np.load(file_path)
         self.data = npz['arr_0']
         self.label = npz['arr_1']
+
+    def __len__(self):
+        return len(self.label)
+
+    def __getitem__(self, idx):
+        return self.data[idx], np.argmax(self.label[idx])
+
+class FileDatasets2(Dataset):
+    def __init__(self, file_list):
+        self.data = []
+        self.label = []
+        for file_path in file_list:
+            npz = np.load(file_path)
+            self.data.extend(npz['arr_0'])
+            self.label.extend(npz['arr_1'])
 
     def __len__(self):
         return len(self.label)

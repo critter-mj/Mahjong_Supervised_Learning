@@ -47,7 +47,7 @@ class DiscardNet(nn.Module):
         self.res_blocks = nn.Sequential(*blocks)
 
         self.postproc = nn.Sequential(
-            nn.Conv2d(in_channels=channels_num, out_channels=1, kernel_size=(1,1), padding=(1,0), bias=False),
+            nn.Conv2d(in_channels=channels_num, out_channels=1, kernel_size=(1,1), padding=(0,0), bias=False),
             #nn.ReLU()
         )
 

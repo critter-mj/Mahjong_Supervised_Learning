@@ -30,26 +30,24 @@ class Trainer:
         self.optimizer = optimizer
         self.criterion = criterion
 
+        self.epoch_cnt = 0
+
     def set_file_list(self, train_prefix, test_prefix):
         self.train_file_list = glob.glob(train_prefix)
         self.test_file_list = glob.glob(test_prefix)
 
     def epoch2(self):
-        train_files = self.train_file_list
-        train_batch = BATCH_SIZE
-        test_files = self.test_file_list
-        test_batch = BATCH_SIZE_TEST
         epoch_train_total = 0
         file_batch = 10
 
-        for i in range(len(train_files) // file_batch):
+        test_file_data = FileDatasets2(self.test_file_list)
+        test_data_loader = DataLoader(test_file_data, batch_size=BATCH_SIZE_TEST, shuffle=False, drop_last=True)
+
+        for i in range(len(self.train_file_list) // file_batch):
             print("iteration:", i)
-            train_file = train_files[i*file_batch:i*file_batch+file_batch]
+            train_file = self.train_file_list[i*file_batch:i*file_batch+file_batch]
             train_file_data = FileDatasets2(train_file)
-            train_data_loader = DataLoader(train_file_data, batch_size=train_batch, shuffle=False, drop_last=True)
-            test_file = test_files
-            test_file_data = FileDatasets2(test_file)
-            test_data_loader = DataLoader(test_file_data, batch_size=test_batch, shuffle=False, drop_last=True)
+            train_data_loader = DataLoader(train_file_data, batch_size=BATCH_SIZE, shuffle=False, drop_last=True)
 
             self.model.train()
             train_loss = 0
@@ -92,120 +90,19 @@ class Trainer:
                     test_correct += predicted.eq(targets.data).cpu().sum().item()
                     test_total += targets.size(0)
 
-                print("train_total:", train_total, "train_loss:", train_loss * train_batch / train_total, "train_acc:", 100 * train_correct / train_total)
-                print("test_total:", test_total, "test_loss:", test_loss * test_batch / test_total, "test_acc:", 100 * test_correct / test_total)
+                print("train_total:", train_total, "train_loss:", train_loss * BATCH_SIZE / train_total, "train_acc:", 100 * train_correct / train_total)
+                print("test_total:", test_total, "test_loss:", test_loss * BATCH_SIZE_TEST / test_total, "test_acc:", 100 * test_correct / test_total)
+
+                state = {'epoch': self.epoch_cnt, 'iteration': i, 'model': self.model.state_dict(), 'optimizer': self.optimizer.state_dict()}
+                torch.save(state, "train_tmp.pth")
 
         return epoch_train_total
 
-    def epoch(self, is_train):
-        if is_train:
-            self.model.train()
-            file_list = self.train_file_list
-            batch = BATCH_SIZE
-        else:
-            self.model.eval()
-            file_list = self.test_file_list
-            batch = BATCH_SIZE_TEST
-        epoch_loss = 0
-        correct = 0
-        total = 0
-        
-        """
-        for file_path in tqdm(file_list):
-            file_data = FileDatasets(file_path)
-            data_loader = DataLoader(file_data, batch_size=batch, shuffle=is_train, drop_last=False)
-
-            for inputs, targets in data_loader:
-                inputs = torch.unsqueeze(inputs.to(DEVICE).float(), -1)
-                targets = targets.to(DEVICE).long()
-
-                outputs = self.model(inputs)
-                loss = self.criterion(outputs, targets)
-
-                if is_train:
-                    self.optimizer.zero_grad()
-                    loss.backward()
-                    self.optimizer.step()
-
-                epoch_loss += loss.item()
-                _, predicted = torch.max(outputs.data, 1)
-                correct += predicted.eq(targets.data).cpu().sum().item()
-                total += targets.size(0)
-
-        file_data = FileDatasets2(file_list)
-        data_loader = DataLoader(file_data, batch_size=batch, shuffle=is_train, drop_last=True)
-
-        for inputs, targets in data_loader:
-            inputs = torch.unsqueeze(inputs.to(DEVICE).float(), -1)
-            targets = targets.to(DEVICE).long()
-
-            outputs = self.model(inputs)
-            loss = self.criterion(outputs, targets)
-            if is_train:
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-
-            epoch_loss += loss.item()
-            _, predicted = torch.max(outputs.data, 1)
-            correct += predicted.eq(targets.data).cpu().sum().item()
-            total += targets.size(0)
-            del loss
-            if total % (batch * 500) == 0:
-                print("total:", total, "loss:", epoch_loss / total, "acc:", 100 * correct / total)
-        """
-
-        for i in range(len(file_list) // 100):
-            file_list2 = file_list[i*100:i*100+100]
-            file_data = FileDatasets2(file_list2)
-            data_loader = DataLoader(file_data, batch_size=batch, shuffle=is_train, drop_last=True)
-
-            for inputs, targets in data_loader:
-                inputs = torch.unsqueeze(inputs.to(DEVICE).float(), -1)
-                targets = targets.to(DEVICE).long()
-
-                outputs = self.model(inputs)
-                loss = self.criterion(outputs, targets)
-
-                if is_train:
-                    self.optimizer.zero_grad()
-                    loss.backward()
-                    self.optimizer.step()
-
-                epoch_loss += loss.item()
-                _, predicted = torch.max(outputs.data, 1)
-                correct += predicted.eq(targets.data).cpu().sum().item()
-                total += targets.size(0)
-                if (not is_train) and total % (batch * 200) == 0:
-                    print("total:", total, "loss:", epoch_loss / total, "acc:", 100 * correct / total)
-
-            if is_train and i%50 == 9:
-                print("train_total:", total, "loss:", epoch_loss / total, "acc:", 100 * correct / total)
-
-        epoch_loss /= total
-        acc = 100 * correct / total
-        return epoch_loss, acc, total
-
-    def run_train(self, epoch_begin, epoch_end, test_interval, save_interval):
-        #writer = SummaryWriter(log_dir="./logs")
-        for i in range(epoch_begin, 1 + epoch_end):
-            """
-            train_loss, train_acc, train_total = self.epoch(True)
-            print("train_loss:", train_loss, "train_acc:", train_acc, "train_total:", train_total)
-            #writer.add_scalar("train_acc", train_acc, i)
-
-            if i % test_interval == 0 and 0 < len(self.test_file_list):
-                test_loss, test_acc, test_total = self.epoch(False)
-                print("test_loss:", test_loss, "test_acc:", test_acc, "test_total", test_total)
-                #writer.add_scalar("test_acc", test_acc, i)
-            """
+    def run_train(self, epoch_begin, epoch_end, test_interval):
+        for _i in range(epoch_begin, 1 + epoch_end):
             epoch_train_total = self.epoch2()
-            print("epoch", i, "epoch_train_total:", epoch_train_total)
-
-            if i % save_interval == 0:
-                state = {'epoch': i, 'model': self.model.state_dict(), 'optimizer': self.optimizer.state_dict()}
-                torch.save(state, "train_tmp.pth")
-        #writer.close()
+            self.epoch_cnt += 1
+            print("epoch", self.epoch_cnt, "epoch_train_total:", epoch_train_total)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -242,5 +139,5 @@ if __name__ == '__main__':
     print("test_files_num:", len(trainer.test_file_list))
     print("train_batch_size:", BATCH_SIZE, "test_batch_size:", BATCH_SIZE_TEST)
 
-    trainer.run_train(epoch_begin, 4, 1, 10)
+    trainer.run_train(epoch_begin, 4, 1)
 

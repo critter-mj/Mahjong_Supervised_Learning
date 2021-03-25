@@ -124,15 +124,23 @@ def main_func(args):
         train_prefix = "../akochan_ui/tenhou_npz/kan/2017/20170*/kan_20170*.npz"
         #train_prefix = "../akochan_ui/tenhou_npz/kan/2017/20170101/kan_20170101*.npz"
 
-    if args.dump_cpu_model:
+    criterion = nn.CrossEntropyLoss()
+
+    if args.purpose == 'dump_cpu_model':
         last_state = torch.load('train_tmp.pth')
         model.load_state_dict(last_state['model'])
         model = model.to('cpu')
-        torch.save(model.state_dict(), args.action_type +  '_cpu_state_dict.pth')
+        torch.save(model.state_dict(), args.action_type + '_cpu_state_dict.pth')
         return
+    elif args.purpose == 'test':
+        model.load_state_dict(torch.load(args.action_type + '_cpu_state_dict.pth'))
+        trainer = Trainer(model, None, criterion, None)
+        trainer.set_file_list(train_prefix, test_prefix)
 
-    
-    criterion = nn.CrossEntropyLoss()
+        test_file_data = FileDatasets2(trainer.test_file_list)
+        test_data_loader = DataLoader(test_file_data, batch_size=BATCH_SIZE_TEST, shuffle=False, drop_last=True)
+        trainer.test_epoch(test_data_loader)
+        return    
     
     if args.load:
         tmp = torch.load("train_tmp.pth")
@@ -161,9 +169,9 @@ def main_func(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--purpose', choices=('train', 'test', 'dump_cpu_model'), default='train')
     parser.add_argument('--action_type', choices=('dahai', 'kan'))
     parser.add_argument('--load', action='store_true')
-    parser.add_argument('--dump_cpu_model', action='store_true')
     args = parser.parse_args()
 
     main_func(args)

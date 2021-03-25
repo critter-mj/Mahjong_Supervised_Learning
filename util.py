@@ -60,9 +60,9 @@ class DiscardNet(nn.Module):
         return x
         #return F.log_softmax(x)
 
-class PonNet(nn.Module):
+class FuuroNet(nn.Module):
     def __init__(self, in_channels, channels_num, blocks_num):
-        super(PonNet, self).__init__()
+        super(FuuroNet, self).__init__()
         self.preproc = nn.Sequential(
             nn.Conv2d(in_channels=in_channels, out_channels=channels_num, kernel_size=(3,1), padding=(1,0), bias=False),
             #nn.BatchNorm2d(self.channels[0]),

@@ -13,7 +13,8 @@ import argparse
 
 from util import *
 
-IN_CHANNELS = 560
+#IN_CHANNELS = 560
+IN_CHANNELS = 567
 #MID_CHANNELS = 256
 MID_CHANNELS = 128
 #BLOCKS_NUM = 50
@@ -38,7 +39,7 @@ class Trainer:
 
     def epoch2(self):
         epoch_train_total = 0
-        file_batch = 10
+        file_batch = 100
 
         test_file_data = FileDatasets2(self.test_file_list)
         test_data_loader = DataLoader(test_file_data, batch_size=BATCH_SIZE_TEST, shuffle=False, drop_last=True)
@@ -106,10 +107,21 @@ class Trainer:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--action_type', choices=('dahai', 'kan'))
     parser.add_argument('--load', action='store_true')
     args = parser.parse_args()
 
-    model = DiscardNet(IN_CHANNELS, MID_CHANNELS, BLOCKS_NUM)
+    if args.action_type == 'dahai':
+        model = DiscardNet(IN_CHANNELS, MID_CHANNELS, BLOCKS_NUM)
+        #test_prefix = "../akochan_ui/tenhou_npz/discard/2017/20171001/discard_201710010*.npz"
+        test_prefix = "../akochan_ui/tenhou_npz/discard/2017/20171001/discard_2017100123*.npz"
+        train_prefix = "../akochan_ui/tenhou_npz/discard/2017/20170*/discard_20170*.npz"
+    elif args.action_type == 'kan':
+        model = FuuroNet(IN_CHANNELS, MID_CHANNELS, BLOCKS_NUM)
+        test_prefix = "../akochan_ui/tenhou_npz/kan/2017/20171001/kan_20171001*.npz"
+        train_prefix = "../akochan_ui/tenhou_npz/kan/2017/20170*/kan_20170*.npz"
+        #train_prefix = "../akochan_ui/tenhou_npz/kan/2017/20170101/kan_20170101*.npz"
+
     
     criterion = nn.CrossEntropyLoss()
     
@@ -129,10 +141,6 @@ if __name__ == '__main__':
         epoch_begin = 0
 
     trainer = Trainer(model, optimizer, criterion)
-
-    #test_prefix = "../akochan_ui/tenhou_npz/discard/2017/20171001/discard_201710010*.npz"
-    test_prefix = "../akochan_ui/tenhou_npz/discard/2017/20171001/discard_2017100123*.npz"
-    train_prefix = "../akochan_ui/tenhou_npz/discard/2017/20170*/discard_20170*.npz"
     trainer.set_file_list(train_prefix, test_prefix)
 
     print("train_files_num:", len(trainer.train_file_list))

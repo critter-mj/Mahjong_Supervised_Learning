@@ -13,8 +13,6 @@ import argparse
 
 from util import *
 
-#IN_CHANNELS = 560
-IN_CHANNELS = 567
 #MID_CHANNELS = 256
 MID_CHANNELS = 128
 #BLOCKS_NUM = 50
@@ -26,10 +24,11 @@ LEARNING_RATE = 0.0001
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class Trainer:
-    def __init__(self, model, optimizer, criterion):
+    def __init__(self, model, optimizer, criterion, file_batch):
         self.model = model.to(DEVICE)
         self.optimizer = optimizer
         self.criterion = criterion
+        self.file_batch = file_batch
 
         self.epoch_cnt = 0
 
@@ -37,16 +36,36 @@ class Trainer:
         self.train_file_list = glob.glob(train_prefix)
         self.test_file_list = glob.glob(test_prefix)
 
-    def epoch2(self):
+    def test_epoch(self, test_data_loader):
+        self.model.eval()
+        test_loss = 0
+        test_correct = 0
+        test_total = 0
+
+        for inputs, targets in tqdm(test_data_loader):
+            inputs = torch.unsqueeze(inputs.to(DEVICE).float(), -1)
+            targets = targets.to(DEVICE).long()
+
+            outputs = self.model(inputs)
+            loss = self.criterion(outputs, targets)
+
+            test_loss += loss.item()
+            _, predicted = torch.max(outputs.data, 1)
+            test_correct += predicted.eq(targets.data).cpu().sum().item()
+            test_total += targets.size(0)
+
+        print("test_total:", test_total, "test_loss:", test_loss * BATCH_SIZE_TEST / test_total, "test_acc:", 100 * test_correct / test_total)
+
+
+    def train_epoch(self):
         epoch_train_total = 0
-        file_batch = 100
 
         test_file_data = FileDatasets2(self.test_file_list)
         test_data_loader = DataLoader(test_file_data, batch_size=BATCH_SIZE_TEST, shuffle=False, drop_last=True)
 
-        for i in range(len(self.train_file_list) // file_batch):
+        for i in range(len(self.train_file_list) // self.file_batch):
             print("iteration:", i)
-            train_file = self.train_file_list[i*file_batch:i*file_batch+file_batch]
+            train_file = self.train_file_list[i*self.file_batch:i*self.file_batch+self.file_batch]
             train_file_data = FileDatasets2(train_file)
             train_data_loader = DataLoader(train_file_data, batch_size=BATCH_SIZE, shuffle=False, drop_last=True)
 
@@ -73,26 +92,10 @@ class Trainer:
                 epoch_train_total += targets.size(0)
 
             if i % 40 == 0:
-                print("test:")
-                self.model.eval()
-                test_loss = 0
-                test_correct = 0
-                test_total = 0
-  
-                for inputs, targets in tqdm(test_data_loader):
-                    inputs = torch.unsqueeze(inputs.to(DEVICE).float(), -1)
-                    targets = targets.to(DEVICE).long()
-  
-                    outputs = self.model(inputs)
-                    loss = self.criterion(outputs, targets)
-  
-                    test_loss += loss.item()
-                    _, predicted = torch.max(outputs.data, 1)
-                    test_correct += predicted.eq(targets.data).cpu().sum().item()
-                    test_total += targets.size(0)
-
                 print("train_total:", train_total, "train_loss:", train_loss * BATCH_SIZE / train_total, "train_acc:", 100 * train_correct / train_total)
-                print("test_total:", test_total, "test_loss:", test_loss * BATCH_SIZE_TEST / test_total, "test_acc:", 100 * test_correct / test_total)
+                
+                print("test:")
+                self.test_epoch(test_data_loader)
 
                 state = {'epoch': self.epoch_cnt, 'iteration': i, 'model': self.model.state_dict(), 'optimizer': self.optimizer.state_dict()}
                 torch.save(state, "train_tmp.pth")
@@ -101,26 +104,32 @@ class Trainer:
 
     def run_train(self, epoch_begin, epoch_end, test_interval):
         for _i in range(epoch_begin, 1 + epoch_end):
-            epoch_train_total = self.epoch2()
+            epoch_train_total = self.train_epoch()
             self.epoch_cnt += 1
             print("epoch", self.epoch_cnt, "epoch_train_total:", epoch_train_total)
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--action_type', choices=('dahai', 'kan'))
-    parser.add_argument('--load', action='store_true')
-    args = parser.parse_args()
-
+def main_func(args):
     if args.action_type == 'dahai':
+        IN_CHANNELS = 560
+        FILE_BATCH_SIZE = 10
         model = DiscardNet(IN_CHANNELS, MID_CHANNELS, BLOCKS_NUM)
         #test_prefix = "../akochan_ui/tenhou_npz/discard/2017/20171001/discard_201710010*.npz"
         test_prefix = "../akochan_ui/tenhou_npz/discard/2017/20171001/discard_2017100123*.npz"
         train_prefix = "../akochan_ui/tenhou_npz/discard/2017/20170*/discard_20170*.npz"
     elif args.action_type == 'kan':
+        IN_CHANNELS = 567
+        FILE_BATCH_SIZE = 100
         model = FuuroNet(IN_CHANNELS, MID_CHANNELS, BLOCKS_NUM)
         test_prefix = "../akochan_ui/tenhou_npz/kan/2017/20171001/kan_20171001*.npz"
         train_prefix = "../akochan_ui/tenhou_npz/kan/2017/20170*/kan_20170*.npz"
         #train_prefix = "../akochan_ui/tenhou_npz/kan/2017/20170101/kan_20170101*.npz"
+
+    if args.dump_cpu_model:
+        last_state = torch.load('train_tmp.pth')
+        model.load_state_dict(last_state['model'])
+        model = model.to('cpu')
+        torch.save(model.state_dict(), args.action_type +  '_cpu_state_dict.pth')
+        return
 
     
     criterion = nn.CrossEntropyLoss()
@@ -140,7 +149,7 @@ if __name__ == '__main__':
         optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE, eps=0.0000001)
         epoch_begin = 0
 
-    trainer = Trainer(model, optimizer, criterion)
+    trainer = Trainer(model, optimizer, criterion, FILE_BATCH_SIZE)
     trainer.set_file_list(train_prefix, test_prefix)
 
     print("train_files_num:", len(trainer.train_file_list))
@@ -149,3 +158,12 @@ if __name__ == '__main__':
 
     trainer.run_train(epoch_begin, 4, 1)
 
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--action_type', choices=('dahai', 'kan'))
+    parser.add_argument('--load', action='store_true')
+    parser.add_argument('--dump_cpu_model', action='store_true')
+    args = parser.parse_args()
+
+    main_func(args)

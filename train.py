@@ -1,6 +1,8 @@
 import glob
 import numpy as np
 
+from sklearn import metrics
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,6 +12,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
 import argparse
+import matplotlib.pyplot as plt
 
 from util import *
 
@@ -56,6 +59,31 @@ class Trainer:
 
         print("test_total:", test_total, "test_loss:", test_loss * BATCH_SIZE_TEST / test_total, "test_acc:", 100 * test_correct / test_total)
 
+    def calc_roc(self, test_data_loader, act_label):
+        self.model.eval()
+        prob_list = []
+        label_list = []
+
+        for inputs, targets in tqdm(test_data_loader):
+            inputs = torch.unsqueeze(inputs.to(DEVICE).float(), -1)
+            targets = targets.to(DEVICE).long()
+            outputs = self.model(inputs)
+            outputs = nn.Softmax(dim=1)(outputs)
+
+            prob_list.extend([p[act_label] for p in outputs.tolist()])
+            label_list.extend([t == act_label for t in targets.tolist()])
+
+        fpr, tpr, thresholds = metrics.roc_curve(label_list, prob_list)
+        auc = metrics.auc(fpr, tpr)
+
+        # ROC曲線をプロット
+        plt.plot(fpr, tpr, label='ROC curve (area = %.2f)'%auc)
+        plt.legend()
+        plt.title('ROC curve')
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.grid(True)
+        plt.savefig("roc.png", bbox_inches='tight')
 
     def train_epoch(self):
         epoch_train_total = 0
@@ -116,6 +144,13 @@ def main_func(args):
         #test_prefix = "../akochan_ui/tenhou_npz/discard/2017/20171001/discard_201710010*.npz"
         test_prefix = "../akochan_ui/tenhou_npz/discard/2017/20171001/discard_2017100123*.npz"
         train_prefix = "../akochan_ui/tenhou_npz/discard/2017/20170*/discard_20170*.npz"
+    elif args.action_type == 'reach':
+        IN_CHANNELS = 560
+        FILE_BATCH_SIZE = 100
+        model = FuuroNet(IN_CHANNELS, MID_CHANNELS, BLOCKS_NUM)
+        #test_prefix = "../akochan_ui/tenhou_npz/discard/2017/20171001/discard_201710010*.npz"
+        test_prefix = "../akochan_ui/tenhou_npz/reach/2017/20171001/reach_20171001*.npz"
+        train_prefix = "../akochan_ui/tenhou_npz/reach/2017/20170*/reach_20170*.npz"
     elif args.action_type == 'kan':
         IN_CHANNELS = 567
         FILE_BATCH_SIZE = 100
@@ -123,6 +158,21 @@ def main_func(args):
         test_prefix = "../akochan_ui/tenhou_npz/kan/2017/20171001/kan_20171001*.npz"
         train_prefix = "../akochan_ui/tenhou_npz/kan/2017/20170*/kan_20170*.npz"
         #train_prefix = "../akochan_ui/tenhou_npz/kan/2017/20170101/kan_20170101*.npz"
+    elif args.action_type == 'pon':
+        IN_CHANNELS = 564
+        FILE_BATCH_SIZE = 30
+        model = FuuroNet(IN_CHANNELS, MID_CHANNELS, BLOCKS_NUM)
+        test_prefix = "../akochan_ui/tenhou_npz/pon/2017/20171001/pon_20171001*.npz"
+        train_prefix = "../akochan_ui/tenhou_npz/pon/2017/20170*/pon_20170*.npz"
+        #train_prefix = "../akochan_ui/tenhou_npz/kan/2017/20170101/kan_20170101*.npz"
+    elif args.action_type == 'chi':
+        IN_CHANNELS = 564
+        FILE_BATCH_SIZE = 20
+        model = FuuroNet(IN_CHANNELS, MID_CHANNELS, BLOCKS_NUM)
+        test_prefix = "../akochan_ui/tenhou_npz/chi/2017/20171001/chi_201710010*.npz"
+        train_prefix = "../akochan_ui/tenhou_npz/chi/2017/20170*/chi_20170*.npz"
+
+
 
     criterion = nn.CrossEntropyLoss()
 
@@ -139,7 +189,8 @@ def main_func(args):
 
         test_file_data = FileDatasets2(trainer.test_file_list)
         test_data_loader = DataLoader(test_file_data, batch_size=BATCH_SIZE_TEST, shuffle=False, drop_last=True)
-        trainer.test_epoch(test_data_loader)
+        #trainer.test_epoch(test_data_loader)
+        trainer.calc_roc(test_data_loader, 0)
         return    
     
     if args.load:
@@ -170,7 +221,7 @@ def main_func(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--purpose', choices=('train', 'test', 'dump_cpu_model'), default='train')
-    parser.add_argument('--action_type', choices=('dahai', 'kan'))
+    parser.add_argument('--action_type', choices=('dahai', 'reach', 'pon', 'chi', 'kan'))
     parser.add_argument('--load', action='store_true')
     args = parser.parse_args()
 
